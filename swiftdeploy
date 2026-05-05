@@ -1,0 +1,248 @@
+#!/usr/bin/env python3
+import sys
+import os
+import yaml
+import subprocess
+import time
+import re
+import urllib.request
+
+MANIFEST = "manifest.yaml"
+NGINX_CONF = "nginx.conf"
+COMPOSE_FILE = "docker-compose.yml"
+NGINX_TMPL = "templates/nginx.conf.tmpl"
+COMPOSE_TMPL = "templates/docker-compose.yml.tmpl"
+
+
+def load_manifest():
+    with open(MANIFEST) as f:
+        return yaml.safe_load(f)
+
+
+def render_template(tmpl_path, values):
+    with open(tmpl_path) as f:
+        content = f.read()
+    for k, v in values.items():
+        content = content.replace(f"{{{{{k}}}}}", str(v))
+    return content
+
+
+def cmd_init():
+    print("🔧 Initialising from manifest...")
+    m = load_manifest()
+    values = {
+        "SERVICE_IMAGE": m["services"]["image"],
+        "APP_PORT": m["services"]["port"],
+        "MODE": m["services"].get("mode", "stable"),
+        "APP_VERSION": m["services"].get("version", "1.0.0"),
+        "RESTART_POLICY": m["services"].get("restart", "unless-stopped"),
+        "NGINX_IMAGE": m["nginx"]["image"],
+        "NGINX_PORT": m["nginx"]["port"],
+        "PROXY_TIMEOUT": m["nginx"].get("proxy_timeout", 30),
+        "NETWORK_NAME": m["network"]["name"],
+        "NETWORK_DRIVER": m["network"]["driver_type"],
+        "LOGS_VOLUME": m["volumes"]["logs"],
+    }
+
+    nginx_conf = render_template(NGINX_TMPL, values)
+    with open(NGINX_CONF, "w") as f:
+        f.write(nginx_conf)
+    print(f"  ✅ Generated {NGINX_CONF}")
+
+    compose = render_template(COMPOSE_TMPL, values)
+    with open(COMPOSE_FILE, "w") as f:
+        f.write(compose)
+    print(f"  ✅ Generated {COMPOSE_FILE}")
+
+
+def cmd_validate():
+    print("🔍 Running pre-flight checks...\n")
+    passed = True
+
+    # Check 1: manifest exists and is valid YAML
+    try:
+        m = load_manifest()
+        print("  ✅ manifest.yaml exists and is valid YAML")
+    except Exception as e:
+        print(f"  ❌ manifest.yaml invalid: {e}")
+        passed = False
+        m = None
+
+    # Check 2: required fields present
+    if m:
+        required = [
+            ("services", "image"), ("services", "port"),
+            ("nginx", "image"), ("nginx", "port"),
+            ("network", "name"), ("network", "driver_type")
+        ]
+        missing = []
+        for section, key in required:
+            if not m.get(section, {}).get(key):
+                missing.append(f"{section}.{key}")
+        if missing:
+            print(f"  ❌ Missing fields: {', '.join(missing)}")
+            passed = False
+        else:
+            print("  ✅ All required fields present")
+
+    # Check 3: Docker image exists locally
+    if m:
+        image = m["services"]["image"]
+        result = subprocess.run(
+            ["docker", "image", "inspect", image],
+            capture_output=True
+        )
+        if result.returncode == 0:
+            print(f"  ✅ Docker image '{image}' exists locally")
+        else:
+            print(f"  ❌ Docker image '{image}' not found locally")
+            passed = False
+
+    # Check 4: Nginx port not already bound
+    if m:
+        port = m["nginx"]["port"]
+        result = subprocess.run(
+            ["ss", "-tlnp"],
+            capture_output=True, text=True
+        )
+        if f":{port}" in result.stdout:
+            print(f"  ❌ Port {port} already in use")
+            passed = False
+        else:
+            print(f"  ✅ Port {port} is free")
+
+    # Check 5: nginx.conf is syntactically valid
+    if os.path.exists(NGINX_CONF):
+        result = subprocess.run(
+            ["docker", "run", "--rm",
+             "-v", f"{os.getcwd()}/{NGINX_CONF}:/etc/nginx/nginx.conf:ro",
+             "nginx:latest", "nginx", "-t"],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            print("  ✅ nginx.conf is syntactically valid")
+        else:
+            print(f"  ❌ nginx.conf invalid: {result.stderr}")
+            passed = False
+    else:
+        print("  ⚠️  nginx.conf not found — run init first")
+        passed = False
+
+    print()
+    if passed:
+        print("✅ All checks passed!")
+    else:
+        print("❌ Some checks failed!")
+        sys.exit(1)
+
+
+def cmd_deploy():
+    cmd_init()
+    print("\n🚀 Deploying stack...")
+    subprocess.run(["docker", "compose", "up", "-d", "--build"], check=True)
+
+    print("\n⏳ Waiting for health checks (60s timeout)...")
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        try:
+            m = load_manifest()
+            port = m["nginx"]["port"]
+            with urllib.request.urlopen(
+                f"http://localhost:{port}/healthz", timeout=3
+            ) as r:
+                if r.status == 200:
+                    print("✅ Stack is healthy and ready!")
+                    print(f"   → http://localhost:{port}")
+                    return
+        except Exception:
+            pass
+        time.sleep(3)
+        print("  Still waiting...")
+
+    print("❌ Health check timed out after 60s")
+    sys.exit(1)
+
+
+def cmd_promote(target_mode):
+    if target_mode not in ("canary", "stable"):
+        print("Usage: swiftdeploy promote [canary|stable]")
+        sys.exit(1)
+
+    print(f"🔄 Promoting to {target_mode} mode...")
+
+    # Update manifest in place
+    with open(MANIFEST) as f:
+        content = f.read()
+    content = re.sub(r"mode:\s*\S+", f"mode: {target_mode}", content)
+    with open(MANIFEST, "w") as f:
+        f.write(content)
+    print(f"  ✅ Updated manifest.yaml mode → {target_mode}")
+
+    # Regenerate compose
+    cmd_init()
+
+    # Restart service container only
+    subprocess.run(["docker", "compose", "up", "-d", "--no-deps", "app"], check=True)
+    print("  ✅ Restarted app container")
+
+    # Confirm new mode via /healthz
+    m = load_manifest()
+    port = m["nginx"]["port"]
+    time.sleep(5)
+    for _ in range(10):
+        try:
+            with urllib.request.urlopen(
+                f"http://localhost:{port}/healthz", timeout=3
+            ) as r:
+                import json
+                data = json.loads(r.read())
+                actual_mode = data.get("mode")
+                if actual_mode == target_mode:
+                    print(f"  ✅ Confirmed mode: {actual_mode}")
+                    return
+        except Exception:
+            pass
+        time.sleep(3)
+
+    print("❌ Could not confirm new mode via /healthz")
+    sys.exit(1)
+
+
+def cmd_teardown(clean=False):
+    print("🗑️  Tearing down stack...")
+    subprocess.run(["docker", "compose", "down", "-v"], check=True)
+    if clean:
+        for f in [NGINX_CONF, COMPOSE_FILE]:
+            if os.path.exists(f):
+                os.remove(f)
+                print(f"  🗑️  Deleted {f}")
+    print("✅ Teardown complete")
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: swiftdeploy [init|validate|deploy|promote|teardown]")
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+
+    if cmd == "init":
+        cmd_init()
+    elif cmd == "validate":
+        cmd_validate()
+    elif cmd == "deploy":
+        cmd_deploy()
+    elif cmd == "promote":
+        if len(sys.argv) < 3:
+            print("Usage: swiftdeploy promote [canary|stable]")
+            sys.exit(1)
+        cmd_promote(sys.argv[2])
+    elif cmd == "teardown":
+        cmd_teardown("--clean" in sys.argv)
+    else:
+        print(f"Unknown command: {cmd}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

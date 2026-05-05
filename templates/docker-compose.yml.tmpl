@@ -1,0 +1,43 @@
+networks:
+  {{NETWORK_NAME}}:
+    driver: {{NETWORK_DRIVER}}
+
+volumes:
+  {{LOGS_VOLUME}}:
+
+services:
+  app:
+    image: {{SERVICE_IMAGE}}
+    networks:
+      - {{NETWORK_NAME}}
+    environment:
+      - MODE={{MODE}}
+      - APP_VERSION={{APP_VERSION}}
+      - APP_PORT={{APP_PORT}}
+    volumes:
+      - {{LOGS_VOLUME}}:/app/logs
+    restart: {{RESTART_POLICY}}
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    user: "1000:1000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:{{APP_PORT}}/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  nginx:
+    image: {{NGINX_IMAGE}}
+    networks:
+      - {{NETWORK_NAME}}
+    ports:
+      - "{{NGINX_PORT}}:{{NGINX_PORT}}"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - {{LOGS_VOLUME}}:/var/log/nginx
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: {{RESTART_POLICY}}

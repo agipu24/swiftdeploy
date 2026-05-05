@@ -1,0 +1,44 @@
+user nginx;
+worker_processes auto;
+events { worker_connections 1024; }
+http {
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    log_format custom '$time_iso8601 | $status | ${request_time}s | $upstream_addr | $request';
+    access_log /var/log/nginx/access.log custom;
+
+    proxy_connect_timeout {{PROXY_TIMEOUT}}s;
+    proxy_read_timeout {{PROXY_TIMEOUT}}s;
+    proxy_send_timeout {{PROXY_TIMEOUT}}s;
+
+    server {
+        listen {{NGINX_PORT}};
+        add_header X-Deployed-By swiftdeploy;
+        proxy_pass_header X-Mode;
+
+        error_page 502 = @err502;
+        error_page 503 = @err503;
+        error_page 504 = @err504;
+
+        location @err502 {
+            default_type application/json;
+            return 502 '{"error":"Bad Gateway","code":502,"service":"swiftdeploy","contact":"admin@swiftdeploy.io"}';
+        }
+        location @err503 {
+            default_type application/json;
+            return 503 '{"error":"Service Unavailable","code":503,"service":"swiftdeploy","contact":"admin@swiftdeploy.io"}';
+        }
+        location @err504 {
+            default_type application/json;
+            return 504 '{"error":"Gateway Timeout","code":504,"service":"swiftdeploy","contact":"admin@swiftdeploy.io"}';
+        }
+
+        location / {
+            set $upstream app;
+            proxy_pass http://$upstream:{{APP_PORT}};
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+}
