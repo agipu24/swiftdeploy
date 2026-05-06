@@ -1,9 +1,6 @@
 networks:
   swiftdeploy-net:
     driver: bridge
-  opa-internal:
-    driver: bridge
-    internal: true
 
 volumes:
   swiftdeploy-logs:
@@ -14,7 +11,7 @@ services:
     networks:
       - swiftdeploy-net
     environment:
-      - MODE=canary
+      - MODE=stable
       - APP_VERSION=1.0.0
       - APP_PORT=3000
     volumes:
@@ -48,7 +45,9 @@ services:
   opa:
     image: openpolicyagent/opa:latest-static
     networks:
-      - opa-internal
+      - swiftdeploy-net
+    ports:
+      - "8181:8181"
     volumes:
       - ./policies:/policies
     command:
@@ -59,7 +58,7 @@ services:
       - "/policies"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8181/health"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8181/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3

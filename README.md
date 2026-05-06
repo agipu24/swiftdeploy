@@ -37,3 +37,6 @@ pip3 install pyyaml
 - `GET /` — welcome message with mode, version, timestamp
 - `GET /healthz` — liveness check with uptime
 - `POST /chaos` — simulate degraded behaviour (canary only)
+
+## Blog Post
+https://https://my-tech-journeyy.hashnode.dev/how-i-built-swiftdeploy-a-self-configuring-deployment-tool-with-opa-policy-enforcement-and-real-time-observability
