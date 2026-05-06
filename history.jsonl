@@ -1,0 +1,13 @@
+{"timestamp": "2026-05-06T14:27:35.048308", "event": "teardown", "clean": false}
+{"timestamp": "2026-05-06T14:28:43.368318", "event": "deploy", "status": "started"}
+{"timestamp": "2026-05-06T14:28:46.532450", "event": "deploy", "status": "healthy"}
+{"timestamp": "2026-05-06T14:29:35.450471", "event": "status_scrape", "metrics": {"total_requests": 2, "error_requests": 0, "error_rate": 0.0, "p99_latency_ms": 10}, "host": {"disk_free_gb": 952.94, "cpu_load": 0.61, "mem_free_percent": 73.32}}
+{"timestamp": "2026-05-06T14:29:38.479659", "event": "status_scrape", "metrics": {"total_requests": 2, "error_requests": 0, "error_rate": 0.0, "p99_latency_ms": 10}, "host": {"disk_free_gb": 952.94, "cpu_load": 0.61, "mem_free_percent": 73.15}}
+{"timestamp": "2026-05-06T14:29:39.895920", "event": "status_scrape", "metrics": {"total_requests": 2, "error_requests": 0, "error_rate": 0.0, "p99_latency_ms": 10}, "host": {"disk_free_gb": 952.94, "cpu_load": 0.56, "mem_free_percent": 73.31}}
+{"timestamp": "2026-05-06T14:29:42.915679", "event": "status_scrape", "metrics": {"total_requests": 2, "error_requests": 0, "error_rate": 0.0, "p99_latency_ms": 10}, "host": {"disk_free_gb": 952.94, "cpu_load": 0.51, "mem_free_percent": 73.2}}
+{"timestamp": "2026-05-06T14:29:45.947140", "event": "status_scrape", "metrics": {"total_requests": 3, "error_requests": 0, "error_rate": 0.0, "p99_latency_ms": 10}, "host": {"disk_free_gb": 952.94, "cpu_load": 0.51, "mem_free_percent": 73.04}}
+{"timestamp": "2026-05-06T14:29:48.985148", "event": "status_scrape", "metrics": {"total_requests": 3, "error_requests": 0, "error_rate": 0.0, "p99_latency_ms": 10}, "host": {"disk_free_gb": 952.94, "cpu_load": 0.47, "mem_free_percent": 73.03}}
+{"timestamp": "2026-05-06T14:29:52.024658", "event": "status_scrape", "metrics": {"total_requests": 3, "error_requests": 0, "error_rate": 0.0, "p99_latency_ms": 10}, "host": {"disk_free_gb": 952.94, "cpu_load": 0.51, "mem_free_percent": 72.9}}
+{"timestamp": "2026-05-06T14:29:55.071809", "event": "status_scrape", "metrics": {"total_requests": 4, "error_requests": 0, "error_rate": 0.0, "p99_latency_ms": 10}, "host": {"disk_free_gb": 952.94, "cpu_load": 0.51, "mem_free_percent": 72.7}}
+{"timestamp": "2026-05-06T14:30:54.023275", "event": "promote", "mode": "canary", "status": "success"}
+{"timestamp": "2026-05-06T14:31:27.636548", "event": "promote", "mode": "canary", "status": "success"}

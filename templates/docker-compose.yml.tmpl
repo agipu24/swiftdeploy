@@ -1,6 +1,9 @@
 networks:
   {{NETWORK_NAME}}:
     driver: {{NETWORK_DRIVER}}
+  opa-internal:
+    driver: bridge
+    internal: true
 
 volumes:
   {{LOGS_VOLUME}}:
@@ -21,7 +24,7 @@ services:
       - ALL
     cap_add:
       - NET_BIND_SERVICE
-    user: "1000:1000"
+    user: "nobody"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:{{APP_PORT}}/healthz')"]
       interval: 10s
@@ -41,3 +44,22 @@ services:
       app:
         condition: service_healthy
     restart: {{RESTART_POLICY}}
+
+  opa:
+    image: openpolicyagent/opa:latest-static
+    networks:
+      - opa-internal
+    volumes:
+      - ./policies:/policies
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=error"
+      - "/policies"
+    restart: {{RESTART_POLICY}}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8181/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
